@@ -3,10 +3,11 @@ RUN apt-get update && apt-get install -y curl wget
 
 WORKDIR /app
 
-# 1. إنشاء المجلدات أولاً لمنع تعليق المسارات
+# مفتاح التحديث: تغيير هذا الرقم سيجبر Railway على إعادة تحميل كل شيء
+ENV REFRESHED_AT=2026-05-23-01
+
 RUN mkdir -p plugins
 
-# 2. أمر موحد ومباشر لتحميل النواة وجميع البلوجنات الـ 17 دفعة واحدة لكسر الكاش
 RUN wget -O paper.jar https://fill-data.papermc.io/v1/objects/cfb9281c2657e21ecc8acdaa9efbd6b5b3e873fb5bac4c3b8ba4bba67aa13ee2/paper-26.1.2-65.jar && \
     wget -O plugins/playit.jar https://github.com/playit-cloud/playit-minecraft-plugin/releases/latest/download/playit-minecraft-plugin.jar && \
     wget -O plugins/LuckPerms.jar https://download.luckperms.net/1563/bukkit/loader/LuckPerms-Bukkit-5.4.151.jar && \
@@ -26,9 +27,7 @@ RUN wget -O paper.jar https://fill-data.papermc.io/v1/objects/cfb9281c2657e21ecc
     wget -O plugins/SkinsRestorer.jar https://github.com/SkinsRestorer/SkinsRestorerX/releases/latest/download/SkinsRestorer.jar && \
     wget -O plugins/HolographicDisplays.jar https://github.com/filoghost/HolographicDisplays/releases/latest/download/HolographicDisplays.jar
 
-# 3. إعدادات السيرفر المكرك الثابتة
 RUN echo "eula=true" > eula.txt && \
     echo "online-mode=false" > server.properties
 
-# 4. التشغيل مع كود نفق Playit الأخير الخاص بك وتخصيص الذاكرة المستقر
 CMD ["java", "-Xmx1024M", "-Xms1024M", "-Dplayit.secret=982f90ba697a8f4b", "-jar", "paper.jar", "nogui"]
