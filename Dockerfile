@@ -30,4 +30,4 @@ RUN wget -O paper.jar https://fill-data.papermc.io/v1/objects/cfb9281c2657e21ecc
 RUN echo "eula=true" > eula.txt && \
     echo "online-mode=false" > server.properties
 
-CMD ["java", "-Xmx1024M", "-Xms1024M", "-Dplayit.secret=982f90ba697a8f4b", "-jar", "paper.jar", "nogui"]
+CMD ["java", "-Djava.net.preferIPv4Stack=true", "-Xmx1024M", "-Xms1024M", "-Dplayit.secret=1d0f1971f07969a1", "-jar", "paper.jar", "nogui"]
