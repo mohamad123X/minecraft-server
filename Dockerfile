@@ -2,6 +2,16 @@ FROM eclipse-temurin:25-jre
 RUN apt-get update && apt-get install -y curl wget
 WORKDIR /app
 RUN wget -O paper.jar https://fill-data.papermc.io/v1/objects/cfb9281c2657e21ecc8acdaa9efbd6b5b3e873fb5bac4c3b8ba4bba67aa13ee2/paper-26.1.2-65.jar
-RUN wget -O playit https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64 && chmod +x playit
+
+# إنشاء مجلد الإضافات وتحميل إضافة Playit داخله
+RUN mkdir plugins
+RUN wget -O plugins/playit.jar https://github.com/playit-cloud/playit-minecraft-plugin/releases/latest/download/playit-minecraft-plugin.jar
+
+# الموافقة التلقائية على الشروط
 RUN echo "eula=true" > eula.txt
-CMD ["sh", "-c", "./playit & java -Xmx512M -Xms512M -jar paper.jar nogui"]
+
+# جعل السيرفر مكركاً تلقائياً
+RUN echo "online-mode=false" > server.properties
+
+# تشغيل السيرفر
+CMD ["java", "-Xmx512M", "-Xms512M", "-jar", "paper.jar", "nogui"]
