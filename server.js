@@ -4,14 +4,20 @@ const cors = require('cors');
 
 const app = express();
 app.use(express.json());
-
-// Enable CORS to allow requests from your Blogger domain
 app.use(cors());
 
-// Map to store active bot processes in memory
 const activeBots = new Map();
 
+// تحديد مفتاح الحماية: سيقرأه من إعدادات Railway، أو يستخدم قيمة افتراضية
+const API_KEY = process.env.API_KEY || "YOUR_SECRET_KEY_HERE";
+
 app.post('/api/start-bot', (req, res) => {
+    // 1. التحقق من مفتاح الحماية المرسل من الواجهة
+    const clientKey = req.headers['x-api-key'];
+    if (clientKey !== API_KEY) {
+        return res.status(403).json({ error: 'Access Denied: Invalid API Key' });
+    }
+
     const { serverIp, port, username } = req.body;
 
     if (!serverIp || !username) {
@@ -20,13 +26,11 @@ app.post('/api/start-bot', (req, res) => {
 
     const botId = `${username}_${Date.now()}`;
 
-    // Fork a new isolated Node process for the bot
-    // This ensures that if a bot crashes, the main Express server stays online
+    // 2. تشغيل البوت في عملية فرعية معزولة
     const botProcess = fork('./bot.js', [serverIp, port || '25565', username]);
 
     activeBots.set(botId, botProcess);
 
-    // Handle bot process termination to clear memory
     botProcess.on('exit', (code) => {
         console.log(`[INFO] Bot ${botId} stopped with code ${code}`);
         activeBots.delete(botId);
@@ -35,11 +39,10 @@ app.post('/api/start-bot', (req, res) => {
     res.json({ 
         success: true, 
         botId: botId, 
-        message: 'Bot launched successfully and is attempting to connect.' 
+        message: 'Bot launched successfully!' 
     });
 });
 
-// Endpoint to check how many bots are running
 app.get('/api/status', (req, res) => {
     res.json({ activeBots: activeBots.size });
 });
