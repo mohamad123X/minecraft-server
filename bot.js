@@ -4,8 +4,10 @@ const serverIp = process.argv[2];
 const port = parseInt(process.argv[3]);
 const username = process.argv[4];
 
+let bot;
+
 function createBot() {
-    const bot = mineflayer.createBot({
+    bot = mineflayer.createBot({
         host: serverIp,
         port: port,
         username: username,
@@ -13,22 +15,30 @@ function createBot() {
         viewDistance: "tiny"
     });
 
-    // الاستماع للرسائل المرسلة من خادم Express (اللوحة)
-    process.on('message', (packet) => {
-        if (packet.type === 'send_chat' && bot) {
-            // تنفيذ الرسالة أو الأمر (إذا بدأت بـ / سيفهمها السيرفر كأمر تلقائياً)
-            bot.chat(packet.text); 
-            console.log(`[CONSOLE ACTION] Executed: ${packet.text}`);
-        }
+    bot.on('spawn', () => {
+        console.log(`[BOT] ${username} joined ${serverIp}`);
     });
 
-    bot.on('end', (reason) => {
-        bot.removeAllListeners();
-        process.removeAllListeners(); // تنظيف المستمعين لمنع تسريب الذاكرة
-        setTimeout(createBot, 15000);
+    bot.on('end', () => {
+        console.log('[BOT] Reconnecting...');
+        setTimeout(createBot, 10000);
     });
 
-    bot.on('error', (err) => { console.error(err); });
+    bot.on('error', (err) => {
+        console.error('[BOT ERROR]', err.message);
+    });
 }
+
+// ✅ مهم: نخليه مرة واحدة فقط خارج الفنكشن
+process.on('message', (packet) => {
+    if (packet.type === 'send_chat' && bot) {
+        try {
+            bot.chat(packet.text);
+            console.log(`[CHAT] ${packet.text}`);
+        } catch (e) {
+            console.log('[ERROR] Failed to send chat');
+        }
+    }
+});
 
 createBot();
