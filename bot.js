@@ -13,27 +13,22 @@ function createBot() {
         viewDistance: "tiny"
     });
 
-    bot.on('login', () => {
-        console.log(`[SUCCESS] Bot ${username} entered the server.`);
-    });
-
-    // ميزة كشف سبب الطرد الفوري
-    bot.on('kicked', (reason, loggedIn) => {
-        // تحويل سبب الطرد إلى نص مقروء وطباعته في الكونسول لمعاينته في Railway Logs
-        const cleanReason = JSON.stringify(reason);
-        console.log(`[KICKED ALERT] السيرفر قام بطرد البوت ${username}! السبب المذكور: ${cleanReason}`);
+    // الاستماع للرسائل المرسلة من خادم Express (اللوحة)
+    process.on('message', (packet) => {
+        if (packet.type === 'send_chat' && bot) {
+            // تنفيذ الرسالة أو الأمر (إذا بدأت بـ / سيفهمها السيرفر كأمر تلقائياً)
+            bot.chat(packet.text); 
+            console.log(`[CONSOLE ACTION] Executed: ${packet.text}`);
+        }
     });
 
     bot.on('end', (reason) => {
-        console.log(`[DISCONNECTED] Bot ${username} connection ended. Reason: ${reason}`);
         bot.removeAllListeners();
-        // إعادة اتصال بعد 15 ثانية
+        process.removeAllListeners(); // تنظيف المستمعين لمنع تسريب الذاكرة
         setTimeout(createBot, 15000);
     });
 
-    bot.on('error', (err) => {
-        console.error(`[ERROR] ${username}:`, err.message);
-    });
+    bot.on('error', (err) => { console.error(err); });
 }
 
 createBot();
