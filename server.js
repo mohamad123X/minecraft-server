@@ -16,14 +16,12 @@ const activeBots = new Map();
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
-
-// ✅ تم التصحيح هنا
 const BLOGGER_URL = 'https://nonetworkofficial.blogspot.com';
 
 // Database
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false } // ضروري لـ Railway
 });
 
 // ================= DATABASE =================
@@ -49,20 +47,28 @@ async function initDatabase() {
     }
 }
 
-function launchBotProcess(botId, serverIp, username, userWhoSent) {
-    const botProcess = fork('./bot.js', [serverIp, '25565', username]);
+function launchBotProcess(botId, fullIp, username, userWhoSent) {
+    // فصل الـ IP عن المنفذ إذا كان موجوداً (مثال: mc.server.net:12345)
+    let host = fullIp;
+    let port = '25565';
+    if (fullIp.includes(':')) {
+        [host, port] = fullIp.split(':');
+    }
+
+    // تشغيل البوت كعملية منفصلة
+    const botProcess = fork('./bot.js', [host, port, username]);
 
     botProcess.botData = {
         botId,
-        serverIp,
+        serverIp: fullIp,
         username,
         userWhoSent,
         isSaved247: false
     };
 
     activeBots.set(botId, botProcess);
+    console.log(`[LAUNCH] ${username} on ${fullIp}`);
 
-    console.log(`[LAUNCH] ${username}`);
     botProcess.on('exit', () => activeBots.delete(botId));
 }
 
@@ -80,14 +86,11 @@ async function restoreBotsFromDatabase() {
 }
 
 // ================= AUTH =================
-
-// تسجيل الدخول
 app.get('/api/auth/login', (req, res) => {
     const url = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
     res.redirect(url);
 });
 
-// CALLBACK (تم إصلاح التحويل)
 app.get('/api/auth/callback', async (req, res) => {
     const code = req.query.code;
     if (!code) return res.status(400).send('Missing code');
@@ -106,22 +109,16 @@ app.get('/api/auth/callback', async (req, res) => {
         });
 
         const tokenData = await tokenRes.json();
-
         const userRes = await fetch('https://discord.com/api/users/@me', {
             headers: { Authorization: `Bearer ${tokenData.access_token}` },
         });
 
         const user = await userRes.json();
-
         const uName = encodeURIComponent(user.username);
         const uId = encodeURIComponent(user.id);
-        const uAvatar = encodeURIComponent(
-            `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
-        );
+        const uAvatar = encodeURIComponent(`https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`);
 
-        // ✅ أهم سطر (تم إصلاحه)
         res.redirect(`${BLOGGER_URL}/?login=success&username=${uName}&id=${uId}&avatar=${uAvatar}`);
-
     } catch (err) {
         console.error(err);
         res.status(500).send('Auth error');
@@ -129,53 +126,40 @@ app.get('/api/auth/callback', async (req, res) => {
 });
 
 // ================= API =================
-
 app.post('/api/start-bot', (req, res) => {
-    if (req.headers['x-api-key'] !== API_KEY)
-        return res.status(403).json({ error: 'Access Denied' });
+    if (req.headers['x-api-key'] !== API_KEY) return res.status(403).json({ error: 'Access Denied' });
 
     const { serverIp, username, userWhoSent } = req.body;
-
-    if (!serverIp || !username)
-        return res.status(400).json({ error: 'Missing data' });
+    if (!serverIp || !username) return res.status(400).json({ error: 'Missing data' });
 
     const botId = `${username}_${Date.now()}`;
-
     launchBotProcess(botId, serverIp, username, userWhoSent || "زائر");
 
     res.json({ success: true, botId });
 });
 
 app.post('/api/bot/chat', (req, res) => {
-    if (req.headers['x-api-key'] !== API_KEY)
-        return res.status(403).json({ error: 'Access Denied' });
+    if (req.headers['x-api-key'] !== API_KEY) return res.status(403).json({ error: 'Access Denied' });
 
     const { botId, message } = req.body;
-
     const bot = activeBots.get(botId);
 
-    if (!bot)
-        return res.status(404).json({ error: 'Bot offline' });
+    if (!bot) return res.status(404).json({ error: 'Bot offline' });
 
     bot.send({ type: 'send_chat', text: message });
-
     res.json({ success: true });
 });
 
 app.post('/api/save-bot', async (req, res) => {
-    if (req.headers['x-api-key'] !== API_KEY)
-        return res.status(403).json({ error: 'Access Denied' });
+    if (req.headers['x-api-key'] !== API_KEY) return res.status(403).json({ error: 'Access Denied' });
 
     const { botId, username, userId } = req.body;
-
     const bot = activeBots.get(botId);
 
-    if (!bot)
-        return res.status(404).json({ error: 'Bot not found' });
+    if (!bot) return res.status(404).json({ error: 'Bot not found' });
 
     try {
         bot.botData.isSaved247 = true;
-
         const b = bot.botData;
 
         await pool.query(`
@@ -187,7 +171,6 @@ app.post('/api/save-bot', async (req, res) => {
         `, [b.botId, b.serverIp, b.username, b.userWhoSent, username, userId, true]);
 
         res.json({ success: true });
-
     } catch (err) {
         res.status(500).json({ error: 'DB error' });
     }
