@@ -1,38 +1,37 @@
-// استدعاء الحزم المطلوبة
 const express = require('express');
 const cors = require('cors');
-const { createBot } = require('./bot.js');
+const { createBot, botsStatus } = require('./bot.js');
 
 const app = express();
 
-// تفعيل CORS للسماح لـ Blogger بالاتصال بهذا السيرفر
 app.use(cors());
-// تفعيل قراءة البيانات بصيغة JSON من الواجهة
 app.use(express.json());
 
-// إنشاء مسار (Endpoint) لاستقبال طلبات تشغيل البوت
+// مسار تشغيل البوت
 app.post('/api/start-bot', (req, res) => {
-    // استخراج بيانات البوت المرسلة من واجهة Blogger
-    const { ip, port, username, version } = req.body;
+    // استلام أمر تسجيل الدخول من الواجهة (authCommand)
+    const { ip, port, username, version, authCommand } = req.body;
 
-    // التحقق من وجود البيانات الأساسية
     if (!ip || !username) {
-        // إرجاع خطأ إذا كانت البيانات ناقصة
         return res.status(400).json({ error: 'الرجاء توفير IP واسم البوت.' });
     }
 
     try {
-        // تشغيل البوت باستخدام الدالة الموجودة في bot.js
-        createBot({ ip, port, username, version });
-        
-        // إرسال رد بنجاح العملية لواجهة المستخدم
-        res.status(200).json({ message: `تم إرسال البوت ${username} إلى السيرفر بنجاح!` });
+        createBot({ ip, port, username, version, authCommand });
+        res.status(200).json({ message: `تم إرسال أمر التشغيل للبوت ${username}` });
     } catch (error) {
-        res.status(500).json({ error: 'حدث خطأ داخلي أثناء تشغيل البوت.' });
+        res.status(500).json({ error: 'حدث خطأ داخلي.' });
     }
 });
 
-// إعداد المنفذ (Railway يوفر المنفذ تلقائياً عبر process.env.PORT)
+// [جديد] مسار لمعرفة حالة البوت وسبب الطرد من Blogger
+app.get('/api/status/:username', (req, res) => {
+    const username = req.params.username;
+    // جلب الحالة من الكائن، أو إرجاع رسالة "غير موجود" إذا لم يتم تشغيله بعد
+    const status = botsStatus[username] || { status: 'مجهول', reason: 'البوت لم يبدأ بعد' };
+    res.status(200).json(status);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`[+] السيرفر يعمل بامتياز على المنفذ ${PORT}`);
