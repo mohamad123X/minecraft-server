@@ -1,58 +1,34 @@
+// استدعاء مكتبة mineflayer لبناء البوت
 const mineflayer = require('mineflayer');
 
-// استقبال المتغيرات من server.js
-const serverIp = process.argv[2];
-const port = parseInt(process.argv[3]) || 25565;
-const username = process.argv[4];
-const versionArg = process.argv[5]; // المتغير الرابع هو الإصدار
-
-let bot;
-
-function createBot() {
-    if (bot) {
-        bot.removeAllListeners();
-    }
-
-    // معالجة الإصدار: إذا كان "false" نجعله قيمة بوليانية (Boolean) ليعمل الاكتشاف التلقائي
-    let botVersion = false;
-    if (versionArg && versionArg !== "false") {
-        botVersion = versionArg;
-    }
-
-    bot = mineflayer.createBot({
-        host: serverIp,
-        port: port,
-        username: username,
-        version: botVersion, // استخدام الإصدار المحدد أو التلقائي
-        viewDistance: "tiny"
+// دالة تصدير البوت ليمكن استدعاؤها من السيرفر الأساسي
+function createBot(options) {
+    const bot = mineflayer.createBot({
+        host: options.ip,       // اي بي سيرفر ماين كرافت
+        port: options.port || 25565, // البورت (الافتراضي 25565)
+        username: options.username,  // اسم البوت
+        version: options.version // إصدار اللعبة (مثل 1.16.5 أو 1.20)
     });
 
+    // حدث: عند نجاح دخول البوت للسيرفر
     bot.on('spawn', () => {
-        console.log(`[BOT] ${username} joined ${serverIp}:${port} on version ${botVersion || 'Auto'}`);
+        console.log(`[+] البوت ${options.username} دخل السيرفر بنجاح!`);
     });
 
-    bot.on('end', () => {
-        console.log(`[BOT] ${username} Disconnected. Reconnecting in 10s...`);
-        setTimeout(createBot, 10000);
+    // حدث: عند طرد البوت أو انقطاع الاتصال (لضمان بقائه 24/7)
+    bot.on('end', (reason) => {
+        console.log(`[-] انقطع اتصال البوت ${options.username}. السبب: ${reason}`);
+        console.log('جاري محاولة إعادة الاتصال بعد 10 ثوانٍ...');
+        // إعادة تشغيل البوت تلقائياً بعد 10 ثوانٍ
+        setTimeout(() => createBot(options), 10000);
     });
 
+    // حدث: تسجيل الأخطاء لمنع توقف الخادم بالكامل
     bot.on('error', (err) => {
-        console.error(`[BOT ERROR - ${username}]`, err.message);
+        console.log(`[x] خطأ في البوت ${options.username}:`, err);
     });
+
+    return bot;
 }
 
-// ... (باقي الكود الخاص بـ process.on يبقى كما هو)
-
-// استقبال الأوامر من السيرفر الأساسي (تبقى خارج الدالة)
-process.on('message', (packet) => {
-    if (packet.type === 'send_chat' && bot && bot.entity) { // التأكد من أن البوت متصل فعلياً
-        try {
-            bot.chat(packet.text);
-            console.log(`[CHAT sent] ${packet.text}`);
-        } catch (e) {
-            console.error('[ERROR] Failed to send chat', e.message);
-        }
-    }
-});
-
-createBot();
+module.exports = { createBot };
