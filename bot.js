@@ -1,86 +1,122 @@
 const mineflayer = require('mineflayer');
 
-// كائن عالمي لتخزين حالة البوتات
 const botsStatus = {};
-// كائن جديد لتخزين البوتات النشطة ومنع تشغيل نسخ متكررة في الذاكرة
 const activeBots = {}; 
+// كائن لتخزين فترات الإعلان التلقائي لتنظيفها لاحقاً
+const broadcastIntervals = {}; 
 
 function createBot(options, retries = 0) {
-    // 1. الحماية من التكرار: إذا كان البوت يعمل مسبقاً، تجاهل الطلب
     if (activeBots[options.username] && botsStatus[options.username].status === '🟢 متصل (Online)') {
         console.log(`[!] البوت ${options.username} متصل بالفعل.`);
         return;
     }
 
-    const maxRetries = 5; // أقصى عدد لمحاولات إعادة الاتصال لحماية سيرفر Railway
-
-    // تعيين الحالة المبدئية
-    botsStatus[options.username] = { status: '⏳ جاري الاتصال...', reason: '' };
+    const maxRetries = 5;
+    // تجهيز الهيكل الأساسي لحالة البوت بما فيها الإحداثيات والشات
+    botsStatus[options.username] = { 
+        status: '⏳ جاري الاتصال...', 
+        reason: '',
+        coords: { x: 0, y: 0, z: 0 },
+        chatLogs: [] 
+    };
 
     const bot = mineflayer.createBot({
         host: options.ip,
-        port: options.port || 25565,
+        port: parseInt(options.port) || 25565,
         username: options.username,
-        version: options.version
+        version: options.version || false
     });
 
-    activeBots[options.username] = bot; // حفظ البوت في الذاكرة للتحكم به لاحقاً
+    activeBots[options.username] = bot;
 
     // حدث الدخول الناجح
     bot.on('spawn', () => {
         console.log(`[+] البوت ${options.username} دخل السيرفر.`);
         botsStatus[options.username].status = '🟢 متصل (Online)';
         botsStatus[options.username].reason = 'يعمل بشكل سليم';
-        retries = 0; // تصفير عداد المحاولات عند الدخول بنجاح
+        retries = 0;
 
+        // تنفيذ أمر تسجيل الدخول إذا وُجد
         if (options.authCommand) {
             setTimeout(() => {
                 bot.chat(options.authCommand);
-                console.log(`[*] تم إرسال أمر تسجيل الدخول للبوت ${options.username}`);
-            }, 2000); // زدنا الوقت إلى ثانيتين لضمان استقرار البوت في السيرفر قبل الكتابة
+            }, 2000);
+        }
+
+        // تفعيل ميزة المعلن التلقائي (Auto-Broadcast) إذا تم تفعيلها من الواجهة
+        if (options.broadcastMessage && options.broadcastInterval) {
+            // تنظيف أي موقت قديم لنفس البوت احتياطاً
+            if (broadcastIntervals[options.username]) clearInterval(broadcastIntervals[options.username]);
+            
+            const intervalMs = parseInt(options.broadcastInterval) * 1000; // تحويل إلى ميلي ثانية
+            broadcastIntervals[options.username] = setInterval(() => {
+                if (activeBots[options.username]) {
+                    bot.chat(options.broadcastMessage);
+                    console.log(`[*] [${options.username}] تم إرسال الإعلان التلقائي.`);
+                }
+            }, intervalMs);
         }
     });
 
-    // حدث الطرد المتعمد من السيرفر
-    bot.on('kicked', (reason) => {
-        let kickReason = typeof reason === 'object' ? JSON.stringify(reason) : String(reason);
-        console.log(`[-] تم طرد البوت ${options.username}. السبب: ${kickReason}`);
-        
-        botsStatus[options.username].status = '🔴 تم الطرد (Kicked)';
-        botsStatus[options.username].reason = kickReason;
-        delete activeBots[options.username]; // تفريغ الذاكرة
+    // تحديث الإحداثيات حية عند تحرك البوت
+    bot.on('move', () => {
+        if (bot.entity && bot.entity.position) {
+            botsStatus[options.username].coords = {
+                x: Math.round(bot.entity.position.x),
+                y: Math.round(bot.entity.position.y),
+                z: Math.round(bot.entity.position.z)
+            };
+        }
     });
 
-    // حدث انقطاع الاتصال
+    // استقبال شات السيرفر وحفظ آخر 15 رسالة فقط (Live Chat Viewer)
+    bot.on('message', (jsonMsg) => {
+        const plainText = jsonMsg.toString().trim();
+        if (plainText) {
+            const logs = botsStatus[options.username].chatLogs;
+            logs.push(plainText);
+            if (logs.length > 15) logs.shift(); // حذف الرسائل القديمة للحفاظ على الذاكرة
+        }
+    });
+
+    // دالة تنظيف الموارد عند الانفصال
+    function cleanUpBot(username) {
+        delete activeBots[username];
+        if (broadcastIntervals[username]) {
+            clearInterval(broadcastIntervals[username]);
+            delete broadcastIntervals[username];
+        }
+    }
+
+    bot.on('kicked', (reason) => {
+        let kickReason = typeof reason === 'object' ? JSON.stringify(reason) : String(reason);
+        botsStatus[options.username].status = '🔴 تم الطرد (Kicked)';
+        botsStatus[options.username].reason = kickReason;
+        cleanUpBot(options.username);
+    });
+
     bot.on('end', (reason) => {
         let endReason = String(reason);
-        console.log(`[-] انقطع اتصال ${options.username}. السبب: ${endReason}`);
-        delete activeBots[options.username]; // تفريغ الذاكرة لمنع الـ Memory Leak
+        cleanUpBot(options.username);
         
         if (botsStatus[options.username].status !== '🔴 تم الطرد (Kicked)') {
             botsStatus[options.username].status = '⚫ غير متصل (Offline)';
             botsStatus[options.username].reason = endReason;
 
-            // 2. نظام إعادة الاتصال الذكي
             if (retries < maxRetries) {
-                // زيادة وقت الانتظار تدريجياً: 15ث -> 20ث -> 25ث...
-                const delay = 15000 + (retries * 5000); 
-                console.log(`[*] محاولة إعادة الاتصال (${retries + 1}/${maxRetries}) بعد ${delay/1000} ثانية...`);
+                const delay = 15000 + (retries * 5000);
                 setTimeout(() => createBot(options, retries + 1), delay);
             } else {
-                // التوقف النهائي لحماية Railway
                 botsStatus[options.username].status = '❌ تم الإيقاف';
-                botsStatus[options.username].reason = 'تم تجاوز الحد الأقصى لمحاولات إعادة الاتصال';
-                console.log(`[x] إيقاف محاولات الاتصال للبوت ${options.username} بشكل نهائي.`);
+                botsStatus[options.username].reason = 'تم تجاوز حد محاولات إعادة الاتصال';
             }
         }
     });
 
     bot.on('error', (err) => {
-        console.log(`[x] خطأ في ${options.username}:`, err.message);
         botsStatus[options.username].status = '❌ خطأ برمجي';
         botsStatus[options.username].reason = err.message;
-        delete activeBots[options.username]; // تفريغ الذاكرة
+        cleanUpBot(options.username);
     });
 
     return bot;
