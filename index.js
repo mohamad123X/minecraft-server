@@ -58,18 +58,12 @@ app.post('/api/stop-bot', validateApiKey, (req, res) => {
 app.get('/api/status/:username', (req, res) => {
     const username = req.params.username;
     const status = botsStatus[username] || { status: 'مجهول', reason: 'البوت لم يبدأ بعد', coords: {x:0,y:0,z:0}, chatLogs: [] };
-    res.jsons(status);
+    res.json(status); // تم تصحيح الخطأ المطبعي هنا
 });
 
 // مسار جديد لجلب قائمة بكل البوتات النشطة حالياً في الخادم
 app.get('/api/active-bots', (req, res) => {
     res.status(200).json(Object.keys(botsStatus));
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`[+] السيرفر يعمل بامتياز على المنفذ ${PORT}`);
-});    res.status(200).json(status);
 });
 
 const PORT = process.env.PORT || 3000;
